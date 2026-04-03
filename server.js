@@ -1,3 +1,5 @@
+require("dotenv").config();
+
 const express = require("express");
 const mongoose = require("mongoose");
 const cors = require("cors");
@@ -5,25 +7,29 @@ const dns = require("dns");
 
 const app = express();
 
+// ✅ Middlewares
 app.use(cors());
 app.use(express.json());
 
-// ✅ Fix DNS issue (since your system needs it)
+console.log("✅ SERVER RUNNING");
+
+// ✅ Fix DNS
 dns.setServers(['1.1.1.1', '8.8.8.8']);
 
-// ❗ Disable buffering (prevents timeout error)
+// =======================
+// 🔥 MONGODB SETUP
+// =======================
+
 mongoose.set("bufferCommands", false);
 
-// 🔥 Debug logs (very helpful)
 mongoose.connection.on("connected", () => {
-    console.log("🔥 Mongoose actually connected");
+    console.log("🔥 Mongoose connected");
 });
 
 mongoose.connection.on("error", (err) => {
     console.log("❌ Mongoose error:", err);
 });
 
-// 📄 Schema
 const userSchema = new mongoose.Schema({
     name: String,
     company: String,
@@ -38,17 +44,17 @@ const userSchema = new mongoose.Schema({
     degree: String
 });
 
-// ✅ Use correct collection name from your DB
 const User = mongoose.model("user", userSchema, "collection");
 
-// 🔍 Search API
+// =======================
+// 🔍 SEARCH API
+// =======================
+
 app.get("/search", async (req, res) => {
     try {
-        const query = req.query.name; // using ?name=
+        const query = req.query.name;
 
-        if (!query) {
-            return res.json([]);
-        }
+        if (!query) return res.json([]);
 
         const users = await User.find({
             $or: [
@@ -64,29 +70,72 @@ app.get("/search", async (req, res) => {
         res.json(users);
 
     } catch (err) {
-        console.error("❌ Search Error:", err);
         res.status(500).json({ error: err.message });
     }
 });
 
-// 🚀 Start server AFTER DB connection
+// =======================
+// 🤖 CHATBOT SETUP
+// =======================
+
+const OpenAI = require("openai");
+
+const client = new OpenAI({
+    apiKey: process.env.OPENROUTER_API_KEY,
+    baseURL: "https://openrouter.ai/api/v1"
+});
+
+// ✅ Test route
+app.get("/test", (req, res) => {
+    res.send("TEST WORKING");
+});
+
+// ✅ Chat route
+app.post("/chat", async (req, res) => {
+    try {
+        const userMessage = req.body.message;
+
+        if (!userMessage) {
+            return res.status(400).json({ error: "Message is required" });
+        }
+
+        const response = await client.chat.completions.create({
+            model: "openai/gpt-3.5-turbo",
+            messages: [
+                { role: "user", content: userMessage }
+            ]
+        });
+
+        res.json({
+            reply: response.choices[0].message.content
+        });
+
+    } catch (err) {
+        res.status(500).json({ error: err.message });
+    }
+});
+
+// =======================
+// 🚀 START SERVER (RENDER SAFE)
+// =======================
+
+const PORT = process.env.PORT || 5000;
+
 const startServer = async () => {
     try {
         await mongoose.connect(
             "mongodb+srv://prakhararora2877_db_user:19xmbZKLgOwvioii@connectcluster.mky9ow4.mongodb.net/users?retryWrites=true&w=majority",
-            {
-                serverSelectionTimeoutMS: 10000
-            }
+            { serverSelectionTimeoutMS: 10000 }
         );
 
         console.log("✅ DB Connected");
 
-        app.listen(3000, '0.0.0.0', () => {
-            console.log("🚀 Server running on port 3000");
+        app.listen(PORT, () => {
+            console.log(`🚀 Server running on port ${PORT}`);
         });
 
     } catch (err) {
-        console.error("❌ DB Connection Error:", err);
+        console.error("❌ DB Error:", err);
     }
 };
 
