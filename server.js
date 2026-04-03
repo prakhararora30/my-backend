@@ -51,7 +51,11 @@ app.get("/search", async (req, res) => {
         }
 
         const users = await User.find({
-            name: { $regex: "^" + query, $options: "i" }
+            $or: [
+                { name: { $regex: query, $options: "i" } },
+                { company: { $regex: query, $options: "i" } },
+                { branch: { $regex: query, $options: "i" } }
+            ]
         })
         .limit(10)
         .select("name company branch")
