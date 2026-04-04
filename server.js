@@ -50,6 +50,25 @@ const userSchema = new mongoose.Schema({
 const User = mongoose.model("user", userSchema, "collection");
 
 // =======================
+// 🧪 DEBUG ROUTE
+// =======================
+
+app.get("/debug", async (req, res) => {
+    try {
+        const count = await User.countDocuments();
+        const sample = await User.find({}).limit(3).lean();
+        res.json({
+            dbState: mongoose.connection.readyState,
+            // 1 = connected, 0 = disconnected
+            totalDocs: count,
+            sample: sample
+        });
+    } catch (err) {
+        res.status(500).json({ error: err.message });
+    }
+});
+
+// =======================
 // 🔍 SEARCH API
 // =======================
 
