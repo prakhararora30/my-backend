@@ -4,7 +4,7 @@ const express = require("express");
 const mongoose = require("mongoose");
 const cors = require("cors");
 const dns = require("dns");
-const nodemailer = require("nodemailer");
+const { Resend } = require("resend");
 const OpenAI = require("openai");
 
 const app = express();
@@ -100,31 +100,8 @@ app.get("/search", async (req, res) => {
 // 📧 EMAIL + OTP SETUP
 // =======================
 
+const resend = new Resend(process.env.RESEND_API_KEY);
 const otpStore = {};
-
-// ✅ Fixed transporter — forces IPv4, avoids Render IPv6 issue
-const transporter = nodemailer.createTransport({
-    host: "smtp.gmail.com",
-    port: 587,
-    secure: false,
-    family: 4,
-    auth: {
-        user: process.env.EMAIL_USER,
-        pass: process.env.EMAIL_PASS
-    },
-    tls: {
-        rejectUnauthorized: false
-    }
-});
-
-// ✅ Verify transporter on startup
-transporter.verify((error, success) => {
-    if (error) {
-        console.log("❌ Email transporter error:", error);
-    } else {
-        console.log("✅ Email transporter ready");
-    }
-});
 
 // ✅ SEND OTP
 app.post("/send-otp", async (req, res) => {
@@ -143,12 +120,17 @@ app.post("/send-otp", async (req, res) => {
 
         otpStore[email] = otp;
 
-        await transporter.sendMail({
-            from: process.env.EMAIL_USER,
+        const { error } = await resend.emails.send({
+            from: "onboarding@resend.dev",
             to: email,
             subject: "Your OTP Code",
             text: `Your OTP is ${otp}`
         });
+
+        if (error) {
+            console.error("❌ Resend Error:", error);
+            return res.status(500).json({ error: error.message });
+        }
 
         res.json({ message: "OTP sent" });
 
