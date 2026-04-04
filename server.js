@@ -59,7 +59,6 @@ app.get("/debug", async (req, res) => {
         const sample = await User.find({}).limit(3).lean();
         res.json({
             dbState: mongoose.connection.readyState,
-            // 1 = connected, 0 = disconnected
             totalDocs: count,
             sample: sample
         });
@@ -103,11 +102,27 @@ app.get("/search", async (req, res) => {
 
 const otpStore = {};
 
+// ✅ Fixed transporter — forces IPv4, avoids Render IPv6 issue
 const transporter = nodemailer.createTransport({
-    service: "gmail",
+    host: "smtp.gmail.com",
+    port: 587,
+    secure: false,
+    family: 4,
     auth: {
         user: process.env.EMAIL_USER,
         pass: process.env.EMAIL_PASS
+    },
+    tls: {
+        rejectUnauthorized: false
+    }
+});
+
+// ✅ Verify transporter on startup
+transporter.verify((error, success) => {
+    if (error) {
+        console.log("❌ Email transporter error:", error);
+    } else {
+        console.log("✅ Email transporter ready");
     }
 });
 
