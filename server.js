@@ -114,7 +114,32 @@ app.post("/chat", async (req, res) => {
         // 🔍 STEP 1: SEARCH DATABASE
         // =======================
 
-        const keyword = userMessage.toLowerCase();
+        // 🧠 Step 1: Clean sentence (remove common words)
+const stopWords = [
+    "i", "want", "people", "working", "in", "the", "a", "an", "who",
+    "is", "are", "for", "with", "me", "to", "of"
+];
+
+const words = userMessage
+    .toLowerCase()
+    .split(" ")
+    .filter(word => !stopWords.includes(word));
+
+// 🔍 Step 2: Create regex from important words
+const regex = new RegExp(words.join("|"), "i");
+
+// 🔍 Step 3: Search DB
+const users = await User.find({
+    $or: [
+        { name: regex },
+        { company: regex },
+        { branch: regex },
+        { domain: regex }
+    ]
+})
+.limit(5)
+.select("name company branch")
+.lean();
 
         const users = await User.find({
             $or: [
