@@ -4,6 +4,8 @@ const express = require("express");
 const mongoose = require("mongoose");
 const cors = require("cors");
 const dns = require("dns");
+const nodemailer = require("nodemailer");
+const OpenAI = require("openai");
 
 const app = express();
 
@@ -45,7 +47,6 @@ const userSchema = new mongoose.Schema({
     degree: String
 });
 
-// ✅ Collection
 const User = mongoose.model("user", userSchema, "collection");
 
 // =======================
@@ -78,10 +79,64 @@ app.get("/search", async (req, res) => {
 });
 
 // =======================
-// 🤖 CHATBOT SETUP
+// 📧 EMAIL + OTP SETUP
 // =======================
 
-const OpenAI = require("openai");
+const otpStore = {};
+
+const transporter = nodemailer.createTransport({
+    service: "gmail",
+    auth: {
+        user: process.env.EMAIL_USER,
+        pass: process.env.EMAIL_PASS
+    }
+});
+
+// ✅ SEND OTP
+app.post("/send-otp", async (req, res) => {
+    console.log("🔥 /send-otp hit");
+
+    const { email } = req.body;
+
+    if (!email) {
+        return res.status(400).json({ error: "Email required" });
+    }
+
+    const otp = Math.floor(100000 + Math.random() * 900000);
+
+    otpStore[email] = otp;
+
+    try {
+        await transporter.sendMail({
+            from: process.env.EMAIL_USER,
+            to: email,
+            subject: "Your OTP Code",
+            text: `Your OTP is ${otp}`
+        });
+
+        res.json({ message: "OTP sent" });
+
+    } catch (err) {
+        console.error("❌ EMAIL ERROR:", err.message);
+        res.status(500).json({ error: err.message });
+    }
+});
+
+// ✅ VERIFY OTP
+app.post("/verify-otp", (req, res) => {
+    const { email, otp } = req.body;
+
+    if (otpStore[email] == otp) {
+        delete otpStore[email];
+        return res.json({ success: true });
+    }
+
+    res.status(400).json({ success: false, message: "Invalid OTP" });
+});
+
+// =======================
+// 🤖 CHATBOT SETUP
+// =======================
 
 const client = new OpenAI({
     apiKey: process.env.OPENROUTER_API_KEY,
@@ -97,7 +152,7 @@ app.get("/test", (req, res) => {
 });
 
 // =======================
-// 🤖 CHAT + DB INTEGRATION
+// 🤖 CHAT + DB
 // =======================
 
 app.post("/chat", async (req, res) => {
@@ -110,13 +165,10 @@ app.post("/chat", async (req, res) => {
             return res.status(400).json({ error: "Message is required" });
         }
 
-        // =======================
-        // 🧠 SMART KEYWORD EXTRACTION
-        // =======================
-
+        // 🧠 Clean sentence
         const stopWords = [
-            "i", "want", "people", "working", "in", "the", "a", "an", "who",
-            "is", "are", "for", "with", "me", "to", "of"
+            "i","want","people","working","in","the","a","an","who",
+            "is","are","for","with","me","to","of"
         ];
 
         const words = userMessage
@@ -126,10 +178,7 @@ app.post("/chat", async (req, res) => {
 
         const regex = new RegExp(words.join("|"), "i");
 
-        // =======================
-        // 🔍 SINGLE DB SEARCH
-        // =======================
-
+        // 🔍 Search DB
         const users = await User.find({
             $or: [
                 { name: regex },
@@ -142,10 +191,7 @@ app.post("/chat", async (req, res) => {
         .select("name company branch")
         .lean();
 
-        // =======================
-        // 🎯 IF USERS FOUND
-        // =======================
-
+        // ✅ If users found
         if (users.length > 0) {
             return res.json({
                 reply: "Here are some people I found:",
@@ -153,10 +199,7 @@ app.post("/chat", async (req, res) => {
             });
         }
 
-        // =======================
-        // 🤖 AI RESPONSE
-        // =======================
-
+        // 🤖 AI fallback
         const response = await client.chat.completions.create({
             model: "openai/gpt-3.5-turbo",
             messages: [
@@ -190,10 +233,8 @@ const PORT = process.env.PORT || 5000;
 const startServer = async () => {
     try {
         await mongoose.connect(
-            "mongodb+srv://prakhararora2877_db_user:19xmbZKLgOwvioii@connectcluster.mky9ow4.mongodb.net/users?retryWrites=true&w=majority",
-            {
-                serverSelectionTimeoutMS: 10000
-            }
+            process.env.MONGO_URI, // 🔥 move this to .env
+            { serverSelectionTimeoutMS: 10000 }
         );
 
         console.log("✅ DB Connected");
