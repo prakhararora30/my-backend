@@ -96,17 +96,19 @@ const transporter = nodemailer.createTransport({
 app.post("/send-otp", async (req, res) => {
     console.log("🔥 /send-otp hit");
 
-    const { email } = req.body;
-
-    if (!email) {
-        return res.status(400).json({ error: "Email required" });
-    }
-
-    const otp = Math.floor(100000 + Math.random() * 900000);
-
-    otpStore[email] = otp;
-
     try {
+        if (!req.body || !req.body.email) {
+            return res.status(400).json({ error: "Email required" });
+        }
+
+        const email = req.body.email;
+        console.log("📧 Email:", email);
+
+        const otp = Math.floor(100000 + Math.random() * 900000);
+        console.log("🔑 OTP:", otp);
+
+        otpStore[email] = otp;
+
         await transporter.sendMail({
             from: process.env.EMAIL_USER,
             to: email,
@@ -117,21 +119,31 @@ app.post("/send-otp", async (req, res) => {
         res.json({ message: "OTP sent" });
 
     } catch (err) {
-        console.error("❌ EMAIL ERROR:", err.message);
+        console.error("❌ EMAIL ERROR:", err);
         res.status(500).json({ error: err.message });
     }
 });
 
 // ✅ VERIFY OTP
 app.post("/verify-otp", (req, res) => {
-    const { email, otp } = req.body;
+    try {
+        if (!req.body || !req.body.email || !req.body.otp) {
+            return res.status(400).json({ error: "Email and OTP required" });
+        }
 
-    if (otpStore[email] == otp) {
-        delete otpStore[email];
-        return res.json({ success: true });
+        const { email, otp } = req.body;
+
+        if (otpStore[email] == otp) {
+            delete otpStore[email];
+            return res.json({ success: true });
+        }
+
+        res.status(400).json({ success: false, message: "Invalid OTP" });
+
+    } catch (err) {
+        console.error("❌ VERIFY ERROR:", err);
+        res.status(500).json({ error: err.message });
     }
-
-    res.status(400).json({ success: false, message: "Invalid OTP" });
 });
 
 // =======================
@@ -159,11 +171,11 @@ app.post("/chat", async (req, res) => {
     console.log("🔥 /chat route hit");
 
     try {
-        const userMessage = req.body.message;
-
-        if (!userMessage) {
+        if (!req.body || !req.body.message) {
             return res.status(400).json({ error: "Message is required" });
         }
+
+        const userMessage = req.body.message;
 
         // 🧠 Clean sentence
         const stopWords = [
@@ -176,7 +188,10 @@ app.post("/chat", async (req, res) => {
             .split(" ")
             .filter(word => !stopWords.includes(word));
 
-        const regex = new RegExp(words.join("|"), "i");
+        // fallback if no keywords
+        const regex = words.length > 0
+            ? new RegExp(words.join("|"), "i")
+            : /.*/;
 
         // 🔍 Search DB
         const users = await User.find({
@@ -219,7 +234,7 @@ app.post("/chat", async (req, res) => {
         });
 
     } catch (err) {
-        console.error("❌ ERROR:", err.message);
+        console.error("❌ CHAT ERROR:", err);
         res.status(500).json({ error: err.message });
     }
 });
@@ -232,10 +247,13 @@ const PORT = process.env.PORT || 5000;
 
 const startServer = async () => {
     try {
-        await mongoose.connect(
-            process.env.MONGO_URI, // 🔥 move this to .env
-            { serverSelectionTimeoutMS: 10000 }
-        );
+        if (!process.env.MONGO_URI) {
+            throw new Error("MONGO_URI missing in .env");
+        }
+
+        await mongoose.connect(process.env.MONGO_URI, {
+            serverSelectionTimeoutMS: 10000
+        });
 
         console.log("✅ DB Connected");
 
@@ -244,7 +262,7 @@ const startServer = async () => {
         });
 
     } catch (err) {
-        console.error("❌ DB Error:", err);
+        console.error("❌ DB Error:", err.message);
     }
 };
 
