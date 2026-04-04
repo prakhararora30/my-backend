@@ -111,42 +111,31 @@ app.post("/chat", async (req, res) => {
         }
 
         // =======================
-        // 🔍 STEP 1: SEARCH DATABASE
+        // 🧠 SMART KEYWORD EXTRACTION
         // =======================
 
-        // 🧠 Step 1: Clean sentence (remove common words)
-const stopWords = [
-    "i", "want", "people", "working", "in", "the", "a", "an", "who",
-    "is", "are", "for", "with", "me", "to", "of"
-];
+        const stopWords = [
+            "i", "want", "people", "working", "in", "the", "a", "an", "who",
+            "is", "are", "for", "with", "me", "to", "of"
+        ];
 
-const words = userMessage
-    .toLowerCase()
-    .split(" ")
-    .filter(word => !stopWords.includes(word));
+        const words = userMessage
+            .toLowerCase()
+            .split(" ")
+            .filter(word => !stopWords.includes(word));
 
-// 🔍 Step 2: Create regex from important words
-const regex = new RegExp(words.join("|"), "i");
+        const regex = new RegExp(words.join("|"), "i");
 
-// 🔍 Step 3: Search DB
-const users = await User.find({
-    $or: [
-        { name: regex },
-        { company: regex },
-        { branch: regex },
-        { domain: regex }
-    ]
-})
-.limit(5)
-.select("name company branch")
-.lean();
+        // =======================
+        // 🔍 SINGLE DB SEARCH
+        // =======================
 
         const users = await User.find({
             $or: [
-                { name: { $regex: keyword, $options: "i" } },
-                { company: { $regex: keyword, $options: "i" } },
-                { branch: { $regex: keyword, $options: "i" } },
-                { domain: { $regex: keyword, $options: "i" } }
+                { name: regex },
+                { company: regex },
+                { branch: regex },
+                { domain: regex }
             ]
         })
         .limit(5)
@@ -154,7 +143,7 @@ const users = await User.find({
         .lean();
 
         // =======================
-        // 🎯 STEP 2: IF USERS FOUND
+        // 🎯 IF USERS FOUND
         // =======================
 
         if (users.length > 0) {
@@ -165,7 +154,7 @@ const users = await User.find({
         }
 
         // =======================
-        // 🤖 STEP 3: AI RESPONSE
+        // 🤖 AI RESPONSE
         // =======================
 
         const response = await client.chat.completions.create({
@@ -193,7 +182,7 @@ const users = await User.find({
 });
 
 // =======================
-// 🚀 START SERVER (RENDER SAFE)
+// 🚀 START SERVER
 // =======================
 
 const PORT = process.env.PORT || 5000;
